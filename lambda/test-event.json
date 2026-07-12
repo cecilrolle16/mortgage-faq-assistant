@@ -1,0 +1,8 @@
+{
+  "requestContext": {
+    "http": {
+      "method": "POST"
+    }
+  },
+  "body": "{\"question\": \"What credit score do I need for a conventional mortgage?\"}"
+}
