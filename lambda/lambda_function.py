@@ -1,8 +1,8 @@
 """
 HomePath AI — Mortgage FAQ Lambda
-Calls Amazon Bedrock (Claude) to answer mortgage questions.
+Calls Amazon Bedrock (Claude Haiku 4.5) via the US inference profile.
 
-Deploy via AWS Console — see DEPLOY.md in the project root.
+Deploy: copy this file into Lambda, then follow DEPLOY.md remaining steps.
 """
 
 import json
@@ -10,8 +10,7 @@ import os
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
-# Use the US inference profile (required for Haiku 4.5 on Bedrock).
-# Override via Lambda env var BEDROCK_MODEL_ID if needed.
+# US inference profile for Claude Haiku 4.5.
 BEDROCK_MODEL_ID = os.environ.get(
     "BEDROCK_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 )
@@ -28,8 +27,7 @@ Rules:
 - When appropriate, suggest speaking with a licensed mortgage professional.
 - Do not invent specific lender names, NMLS numbers, or current rate quotes."""
 
-# Function URL CORS is configured in AWS — only set Content-Type here to avoid
-# duplicate Access-Control-* headers (which browsers reject).
+# CORS is set on the Function URL in AWS. Do not duplicate CORS headers here.
 RESPONSE_HEADERS = {
     "Content-Type": "application/json",
 }
@@ -61,6 +59,9 @@ def lambda_handler(event, context):
             return _response(400, {"error": "Question must be 1000 characters or fewer."})
 
         answer = _ask_bedrock(question)
+        if not answer:
+            raise ValueError("Empty response from Bedrock")
+
         return _response(200, {"answer": answer})
 
     except json.JSONDecodeError:
@@ -86,7 +87,6 @@ def lambda_handler(event, context):
 
 
 def _get_http_method(event):
-    """Supports Lambda Function URL and API Gateway event shapes."""
     if "requestContext" in event and "http" in event["requestContext"]:
         return event["requestContext"]["http"].get("method", "POST")
     return event.get("httpMethod", "POST")
@@ -102,27 +102,18 @@ def _parse_question(event):
 
 
 def _ask_bedrock(question):
-    payload = {
-        "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": 1024,
-        "system": SYSTEM_PROMPT,
-        "messages": [{"role": "user", "content": question}],
-    }
-
-    result = bedrock.invoke_model(
+    result = bedrock.converse(
         modelId=BEDROCK_MODEL_ID,
-        body=json.dumps(payload),
-        contentType="application/json",
-        accept="application/json",
+        system=[{"text": SYSTEM_PROMPT}],
+        messages=[{"role": "user", "content": [{"text": question}]}],
+        inferenceConfig={"maxTokens": 1024, "temperature": 0.3},
     )
-
-    response_body = json.loads(result["body"].read())
-    content = response_body.get("content", [])
-
-    if not content:
-        raise ValueError("Empty response from Bedrock")
-
-    return content[0].get("text", "").strip()
+    content = result.get("output", {}).get("message", {}).get("content", [])
+    for block in content:
+        text = block.get("text", "").strip()
+        if text:
+            return text
+    return ""
 
 
 def _response(status_code, payload):

@@ -105,27 +105,18 @@ async function fetchLiveAnswer(question) {
       signal: controller.signal,
     });
 
+    const payload = await parseApiPayload(response);
+
     if (!response.ok) {
-      let detail = "";
-      try {
-        const body = await response.json();
-        detail = body.message || body.error || "";
-      } catch {
-        /* response body is not JSON */
-      }
-      throw new ApiError(
-        detail || `Server returned an error (${response.status}).`,
-        response.status
-      );
+      throw new ApiError(formatApiError(payload, response.status), response.status);
     }
 
-    const data = await response.json();
-
-    if (!data.answer && !data.response) {
+    const answer = payload.answer || payload.response;
+    if (!answer) {
       throw new ApiError("The server returned an empty response. Please try again.");
     }
 
-    return data.answer || data.response;
+    return answer;
   } catch (error) {
     if (error.name === "AbortError") {
       throw new ApiError("The request timed out. Please check your connection and try again.");
@@ -135,13 +126,40 @@ async function fetchLiveAnswer(question) {
     }
     if (error instanceof TypeError) {
       throw new ApiError(
-        "Browser blocked the request (usually CORS). In AWS, update your Function URL CORS to allow POST and OPTIONS from your origin, then hard-refresh the page."
+        "Browser blocked the request (usually CORS). In CloudShell run the CORS command from DEPLOY.md, then hard-refresh this page (Ctrl+Shift+R)."
       );
     }
     throw error;
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+async function parseApiPayload(response) {
+  let data = {};
+  try {
+    data = await response.json();
+  } catch {
+    return {};
+  }
+
+  if (typeof data.body === "string") {
+    try {
+      return JSON.parse(data.body);
+    } catch {
+      return data;
+    }
+  }
+
+  return data;
+}
+
+function formatApiError(payload, status) {
+  const detail = payload.error_detail || payload.error || payload.message || "";
+  if (typeof detail === "string" && /marketplace|subscribe/i.test(detail)) {
+    return "Amazon Bedrock needs a one-time Marketplace subscription for Claude. Add the IAM policy in lambda/iam-policy.json, send a test message in the Bedrock playground, wait 2 minutes, then try again.";
+  }
+  return detail || `Server returned an error (${status}).`;
 }
 
 function generateDemoAnswer(question) {

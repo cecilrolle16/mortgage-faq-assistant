@@ -1,198 +1,102 @@
-# Deploy HomePath AI to AWS (Manual Guide)
+# Finish HomePath AI (Amazon Bedrock)
 
-This guide walks you through deploying the **Lambda backend** with **Amazon Bedrock (Claude)** and connecting it to your frontend.
-
-**Time:** ~20–30 minutes  
-**Cost:** Pay-per-use (Bedrock + Lambda). Claude Haiku is low cost for FAQ-style questions.
-
----
-
-## What you're building
+You already have the frontend, Lambda, Function URL (`NONE` auth), and a working Function URL. Finish with **three AWS steps**.
 
 ```
-Browser (index.html + script.js)
-        │
-        │  POST { "question": "..." }
-        ▼
-Lambda Function URL
-        │
-        ▼
-Amazon Bedrock (Claude Haiku)
-        │
-        ▼
-{ "answer": "..." }  →  shown on the page
+Browser  →  Lambda Function URL  →  Amazon Bedrock (Claude Haiku 4.5)  →  answer
 ```
 
----
-
-## Prerequisites
-
-- [ ] AWS account ([aws.amazon.com](https://aws.amazon.com))
-- [ ] Credit card on file (free tier may apply, but Bedrock is billed per use)
-- [ ] Region: **US East (N. Virginia) `us-east-1`** recommended (best Bedrock model availability)
+Model ID used in code: `us.anthropic.claude-haiku-4-5-20251001-v1:0`
 
 ---
 
-## Step 1: Enable Claude in Bedrock
+## Step 1: Redeploy Lambda code
 
-1. Sign in to the [AWS Console](https://console.aws.amazon.com)
-2. Search for **Amazon Bedrock**
-3. Go to **Model catalog** → find **Claude Haiku 4.5** (active model)
-4. If prompted, **Submit use case details** (one-time Anthropic form for new accounts)
-
-> **Note:** Claude 3 Haiku is legacy — new accounts cannot use it. This project uses **Claude Haiku 4.5** (`anthropic.claude-haiku-4-5-20251001-v1:0`).
-
----
-
-## Step 2: Create the Lambda function
-
-1. Search for **Lambda** in the AWS Console
-2. Click **Create function**
-3. Settings:
-   - **Author from scratch**
-   - **Function name:** `homepath-mortgage-faq`
-   - **Runtime:** `Python 3.12`
-   - **Architecture:** `x86_64`
-4. Under **Permissions**, expand **Change default execution role**
-   - Create a new role with basic Lambda permissions
-5. Click **Create function**
+1. Open `lambda/lambda_function.py` on your computer → Ctrl+A → Ctrl+C
+2. AWS Console → **Lambda** → `homepath-mortgage-faq` → **Code**
+3. Ctrl+A → Ctrl+V → **Deploy**
+4. Confirm the file contains: `us.anthropic.claude-haiku-4-5-20251001-v1:0`
+5. **Configuration** → **General configuration** → timeout **30 seconds**
 
 ---
 
-## Step 3: Paste the Lambda code
+## Step 2: One IAM policy (Bedrock + Marketplace)
 
-1. Open the `lambda/lambda_function.py` file from this project
-2. Copy **all** of the code
-3. In the Lambda console, open the **Code** tab
-4. Replace the contents of `lambda_function.py` with your copied code
-5. Click **Deploy**
+This is the last Bedrock blocker. Claude on Bedrock needs Marketplace subscribe permission **and** invoke permission in **us-east-1 and us-east-2**.
+
+1. Lambda → **Configuration** → **Permissions** → click role `homepath-mortgage-faq-role-8lciya1p`
+2. **Add permissions** → **Create inline policy** → **JSON**
+3. Paste the contents of `lambda/iam-policy.json`
+4. Name: `BedrockClaudeHaiku45` → **Create policy**
+
+Also confirm **Billing → Payment methods** has a default card (Marketplace needs this once).
+
+**Subscribe the model once from the console (required for new accounts):**
+
+1. Amazon Bedrock → **Model catalog** → **Claude Haiku 4.5**
+2. Open **Playground / Chat**
+3. Send: `What is a down payment?`
+4. If a use-case / Marketplace prompt appears, accept it
+5. Wait **2 minutes**
+
+That first playground call enables the model for the whole account, including Lambda.
 
 ---
 
-## Step 4: Give Lambda permission to call Bedrock
+## Step 3: CORS for the website
 
-1. In your Lambda function, go to **Configuration** → **Permissions**
-2. Click the **Role name** (opens IAM in a new tab)
-3. Click **Add permissions** → **Create inline policy**
-4. Click **JSON** and paste:
+The console cannot list `OPTIONS` (name is too long). Use `*` for methods.
+
+**CloudShell** — paste this **one** command:
+
+```bash
+aws lambda update-function-url-config --region us-east-1 --function-name homepath-mortgage-faq --cors '{"AllowOrigins":["*"],"AllowMethods":["*"],"AllowHeaders":["content-type"]}'
+```
+
+Auth type must stay **NONE**.
+
+---
+
+## Step 4: Test
+
+**A. Lambda Test tab** — event:
 
 ```json
 {
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": "bedrock:InvokeModel",
-      "Resource": [
-        "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
-        "arn:aws:bedrock:us-east-1:*:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0"
-      ]
-    }
-  ]
+  "question": "What credit score do I need for a conventional mortgage?"
 }
 ```
 
-5. Click **Next**
-6. **Policy name:** `BedrockInvokeClaudeHaiku`
-7. Click **Create policy**
+Want: `"statusCode": 200` and an `"answer"`.
 
-> If you use a different region, replace `us-east-1` in the ARN with your region.
+**B. CloudShell:**
 
----
-
-## Step 5: Adjust Lambda settings
-
-1. Go to **Configuration** → **General configuration** → **Edit**
-   - **Timeout:** `30` seconds (Bedrock can take a few seconds)
-   - **Memory:** `256` MB (or `512` MB for slightly faster cold starts)
-2. Save
-
----
-
-## Step 6: Test in the Lambda console
-
-1. Go to the **Test** tab
-2. Create a new test event:
-   - **Event name:** `MortgageQuestion`
-   - Paste the contents of `lambda/test-event.json` from this project
-3. Click **Test**
-4. You should see **statusCode: 200** and an `answer` in the response body
-
-If you get an access error, double-check Step 1 (model access) and Step 4 (IAM policy).
-
----
-
-## Step 7: Create a Function URL (so the browser can call it)
-
-1. Go to **Configuration** → **Function URL** → **Create function URL**
-2. Settings:
-   - **Auth type:** `NONE` (public URL — fine for a learning project; add auth later for production)
-   - **Configure cross-origin resource sharing (CORS):**
-     - Allow origin: `*`
-     - Allow methods: `POST`
-     - Allow headers: `Content-Type`
-3. Click **Save**
-4. **Copy the Function URL** — it looks like:
-   ```
-   https://abcdefghij.lambda-url.us-east-1.on.aws/
-   ```
-
----
-
-## Step 8: Connect the frontend
-
-1. Open `script.js` in this project
-2. Replace the placeholder with your Function URL:
-
-```javascript
-const API_URL = "https://YOUR-FUNCTION-URL.lambda-url.us-east-1.on.aws/";
+```bash
+curl -X POST "https://7cypdm64mhrvtd33czwwbvgfsi0fkkef.lambda-url.us-east-1.on.aws/" -H "Content-Type: application/json" -d '{"question": "What credit score do I need for a conventional mortgage?"}'
 ```
 
-3. Save the file
-4. Open `index.html` in your browser (or use a local server)
-5. Ask a question — you should get a **real AI answer** from Bedrock (demo mode turns off automatically)
+Want: `{"answer":"..."}` not `Forbidden` and not Marketplace errors.
+
+**C. Website:** open `index.html` or `http://localhost:8080` → Ctrl+Shift+R → ask a question.
+
+`script.js` already has your Function URL. Demo mode is off.
 
 ---
 
-## Troubleshooting
+## Error cheat sheet
 
-| Problem | Fix |
-|---------|-----|
-| CORS error in browser | Re-check Function URL CORS settings (Step 7). Hard-refresh the page (Ctrl+Shift+R). |
-| `AccessDeniedException` on Bedrock | Enable Claude Haiku in Bedrock model access (Step 1) and verify IAM policy (Step 4). |
-| `502` / "Unable to generate an answer" | Check **CloudWatch Logs** (Lambda → Monitor → View logs) for the exact error. |
-| Still seeing demo answers | Make sure `API_URL` in `script.js` is your real URL, not `api.example.com`. |
-| Request timeout | Increase Lambda timeout to 30s (Step 5). |
-
----
-
-## Optional: Custom model or region
-
-In Lambda → **Configuration** → **Environment variables**, add:
-
-| Key | Value |
-|-----|-------|
-| `BEDROCK_MODEL_ID` | e.g. `anthropic.claude-3-5-sonnet-20241022-v2:0` |
-| `AWS_REGION` | e.g. `us-east-1` |
-
-Update the IAM policy Resource ARN to match the model and region.
+| error_detail contains | Do this |
+|-----------------------|---------|
+| Marketplace / Subscribe | Step 2 policy + playground subscribe + wait 2 min |
+| not authorized InvokeModel us-east-2 | Use `lambda/iam-policy.json` (covers all regions) |
+| inference profile | Keep `us.anthropic...` in Lambda code |
+| Forbidden | Function URL Auth = NONE + public invoke permissions |
+| Browser cannot reach server | Step 3 CORS `AllowMethods: ["*"]` then hard refresh |
 
 ---
 
-## Security note (for later)
+## Done when
 
-This setup uses a **public** Function URL for simplicity. Before going to production:
-
-- Add API Gateway with throttling
-- Restrict CORS to your domain only
-- Add API keys or AWS WAF
-- Never expose secrets in frontend code (Bedrock is called only from Lambda — good)
-
----
-
-## You're done when…
-
-- [ ] Lambda test returns a real answer
-- [ ] `script.js` has your Function URL
-- [ ] The website shows AI answers (not demo placeholder text)
-- [ ] Loading spinner and error messages still work
+- Lambda Test = 200 with a real Claude answer
+- Website shows that answer (not a canned demo)
+- Financial disclaimer still visible

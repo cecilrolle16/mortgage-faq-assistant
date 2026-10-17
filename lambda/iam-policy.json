@@ -1,0 +1,30 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "InvokeClaudeHaiku45",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream",
+        "bedrock:Converse",
+        "bedrock:ConverseStream"
+      ],
+      "Resource": [
+        "arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+        "arn:aws:bedrock:*:*:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "arn:aws:bedrock:*:*:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0"
+      ]
+    },
+    {
+      "Sid": "MarketplaceSubscribeClaude",
+      "Effect": "Allow",
+      "Action": [
+        "aws-marketplace:ViewSubscriptions",
+        "aws-marketplace:Subscribe",
+        "aws-marketplace:Unsubscribe"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
