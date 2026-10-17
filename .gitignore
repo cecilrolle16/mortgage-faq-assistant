@@ -6,3 +6,4 @@ Thumbs.db
 __pycache__/
 .venv/
 node_modules/
+BUILD-JOURNEY.md
