@@ -1,33 +1,39 @@
 # HomePath AI — Mortgage FAQ Assistant
 
-A mortgage-themed web app that answers home-financing questions using **Amazon Bedrock (Claude Haiku 4.5)** behind **AWS Lambda**.
+A mortgage FAQ web app on **AWS**. The UI is hosted on **Amazon S3** and delivered over **HTTPS with CloudFront**. Questions are answered by **Amazon Bedrock (Claude Haiku 4.5)** through **AWS Lambda**.
 
-Built as a full-stack cloud project: static frontend, serverless API, IAM-secured model access, and a public Function URL.
+## Live demo (public)
 
-## Demo
+**https://dn53i471y53k0.cloudfront.net**
 
-Open `index.html` in a browser (or serve the folder locally) and ask:
+Open that link, ask a mortgage question, and click **Get Answer**.
 
-> How much do I need for a down payment on an FHA loan?
+Example: *How much do I need for a down payment on an FHA loan?*
 
-The UI includes loading state, error handling, character count, mobile layout, and a financial disclaimer.
+The UI includes loading state, error handling, a character count, mobile layout, and a financial disclaimer.
+
+S3 origin (HTTP): http://homepath-faq-cecilrolle16.s3-website-us-east-1.amazonaws.com
 
 ## Architecture
 
 ```
-Browser (HTML / CSS / JS)
+Browser  (https://dn53i471y53k0.cloudfront.net)
+        │
+        ▼
+Amazon CloudFront  →  Amazon S3  (index.html, style.css, script.js)
+        │
         │  POST { "question": "..." }
         ▼
-AWS Lambda Function URL  (auth: NONE, CORS enabled)
+AWS Lambda Function URL
         │
         ▼
 Amazon Bedrock  —  Claude Haiku 4.5
-        │  US inference profile: us.anthropic.claude-haiku-4-5-20251001-v1:0
+        │  us.anthropic.claude-haiku-4-5-20251001-v1:0
         ▼
 { "answer": "..." }
 ```
 
-Bedrock is never called from the browser. The API key stays on the server (Lambda IAM role).
+The browser never talks to Bedrock directly. Lambda’s IAM role invokes the model.
 
 ## Project files
 
@@ -37,29 +43,21 @@ Bedrock is never called from the browser. The API key stays on the server (Lambd
 | `style.css` | Fintech UI |
 | `script.js` | Form, loading, errors, API call |
 | `lambda/lambda_function.py` | Lambda handler → Bedrock Converse |
-| `lambda/iam-policy.json` | IAM policy for Bedrock + Marketplace |
+| `lambda/iam-policy.json` | IAM for Bedrock + Marketplace |
+| `lambda/s3-website-policy.json` | Public-read policy for the S3 website |
 | `DEPLOY.md` | AWS setup notes |
 
-If `API_URL` in `script.js` is still the placeholder, the app uses a local demo mode (no network). With a real Function URL, it calls Bedrock.
+## AWS services used
+
+- **Amazon S3** — static website files  
+- **Amazon CloudFront** — HTTPS CDN in front of S3  
+- **AWS Lambda** + **Function URL** — API  
+- **Amazon Bedrock** — Claude Haiku 4.5  
+- **IAM** — execution role and resource policies  
 
 ## Run locally
 
-Double-click `index.html`, or from this folder:
-
-```powershell
-# Python (if installed)
-python -m http.server 8080
-```
-
-Then open `http://localhost:8080`.
-
-## Skills shown
-
-- HTML, CSS, and JavaScript (fetch, validation, UX states)
-- AWS Lambda + Function URLs
-- Amazon Bedrock (Claude) with inference profiles
-- IAM least-privilege policies and Marketplace model access
-- CORS for a browser calling a public API
+Double-click `index.html`, or serve the folder and open `http://localhost:8080`.
 
 ## Disclaimer
 

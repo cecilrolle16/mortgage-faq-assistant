@@ -95,6 +95,37 @@ Want: `{"answer":"..."}` not `Forbidden` and not Marketplace errors.
 
 ---
 
+## Public website URL (Amazon S3)
+
+To give employers a link they can open in a browser (not GitHub):
+
+1. AWS Console → **S3** → **Create bucket**
+2. Name (must be unique): `homepath-faq-cecilrolle16`
+3. Region: **us-east-1**
+4. Uncheck **Block all public access** → acknowledge → Create
+5. Open the bucket → **Upload** `index.html`, `style.css`, `script.js`
+6. **Permissions** → **Bucket policy** → paste `lambda/s3-website-policy.json` with `REPLACE_BUCKET_NAME` changed to your bucket name
+7. **Properties** → **Static website hosting** → Enable → Index document `index.html` → Save
+8. Copy the **Bucket website endpoint** (starts with `http://`)
+
+That URL is the public app. Get Answer still calls Lambda/Bedrock.
+
+### HTTPS with CloudFront (optional)
+
+1. Search **CloudFront** → **Create distribution**
+2. **Origin domain:** `homepath-faq-cecilrolle16.s3.us-east-1.amazonaws.com` (pick the bucket from the list, not the website endpoint)
+3. **Origin access:** Public (bucket is already public). Do **not** require Origin Access Control unless you follow extra OAC steps.
+4. **Viewer protocol policy:** Redirect HTTP to HTTPS
+5. **Allowed HTTP methods:** GET, HEAD
+6. **Default root object:** `index.html`
+7. **Web Application Firewall (WAF):** Do **not** enable (extra cost)
+8. Create distribution and wait until status is **Enabled** (can take 5–15 minutes)
+9. Use the **Distribution domain name**: `https://dxxxxxxxx.cloudfront.net`
+
+Get Answer still calls the Lambda Function URL.
+
+---
+
 ## Done when
 
 - Lambda Test = 200 with a real Claude answer
